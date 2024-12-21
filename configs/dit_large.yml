@@ -1,0 +1,4 @@
+model:
+  n_layers: 24
+  n_heads: 16
+  d_model: 1024
