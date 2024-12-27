@@ -1,8 +1,9 @@
 import torch
 import wandb
 import numpy as np
+import einops as eo
 
-def to_wandb_image(x : TensorType["c", "h", "w"], caption : str = ""):
+def to_wandb_image(x, caption : str = ""):
     """
     Turn tensor into wandb image for sampling
     """

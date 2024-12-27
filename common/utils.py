@@ -27,11 +27,16 @@ def sample_step_size(batch_size, max_steps = 128):
     # Convert sampled indices to actual step sizes
     return possible_steps[sampled_steps]
 
-def sample_discrete_timesteps(n_steps):
+def sample_discrete_timesteps(n_steps, batch_size = None, device = None, dtype = None):
     """
     Sample timestamps that make sense given n_steps
     """
     # n_steps is a [b,] tensor of values like [1, 2, 4, 8, 16, ...]
+    if not isinstance(n_steps, torch.Tensor):
+        if batch_size is None:
+            raise ValueError("batch_size must be provided when n_steps is not a tensor")
+        n_steps = torch.full((batch_size,), n_steps, device = device, dtype = dtype)
+
 
     # This code is weird so I will explain:
     # For each n_steps value n:
