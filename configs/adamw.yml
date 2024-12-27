@@ -1,0 +1,33 @@
+dataset: imagenet
+target_batch_size: 256 
+batch_size: 256
+epochs: 100
+
+opt: AdamW
+opt_kwargs:
+  lr: 1.0e-4
+  eps: 1.0e-15
+  betas: [0.9, 0.95]
+  weight_decay: 0.1
+
+sample_interval: 1000
+val_interval: 5000
+
+n_samples: 16
+sample_prompts:
+  - golden retriever
+  - tabby cat
+  - school bus
+  - tennis ball
+  - acoustic guitar
+  - monarch butterfly
+  - great white shark
+  - bald eagle
+  - red panda
+  - pineapple
+  - fire truck
+  - grand piano
+  - mountain bike
+  - polar bear
+  - peacock
+  - zebra
