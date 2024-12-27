@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import yaml
 
 @dataclass
@@ -39,9 +39,9 @@ class ModelConfig(ConfigClass):
     cfg_prob : float = 0.1
 
     # Shortcut models
-    sc_weight : float = 0#1.0
+    sc_weight : float = 1.0
     sc_cfg : float = 3.5
-    sc_batch_frac : float = 0#0.25 # What percentage of training batch?
+    sc_batch_frac : float = 0.25 # What percentage of training batch?
     delay_sc : int = 0 # Delay sc to this many steps after training starts
     base_steps : int = 128
 
@@ -54,7 +54,7 @@ class TrainConfig(ConfigClass):
     # optimizer
     opt : str = "Muon"
     opt_kwargs : Dict = field(default_factory = lambda : {
-        "lr": 1.0e-3,
+        "lr": 1.0e-4,
         "eps": 1.0e-15,
         "betas" : (0.9, 0.95),
         #'lr_1d' : 1.0e-3,
@@ -63,7 +63,7 @@ class TrainConfig(ConfigClass):
         #"precondition_frequency" : 2
     })
 
-    scheduler : Optional[str] = "Staircase"
+    scheduler : Optional[str] = None
     scheduler_kwargs : Dict = field(default_factory = lambda: {
         "ramp_down_steps": 1000,
         "breakpoints": [20000, 40000, 80000],
@@ -78,11 +78,11 @@ class TrainConfig(ConfigClass):
     save_interval : int = 20000
     val_interval : int = 5000
     resume : bool = False
-    resume_path : str = "checkpoints/mars_20k"
+    resume_path : str = "checkpoints/40k_resume"
 
     # Sampling
     n_samples : int = 16 # Number of samples to log each time (too many gets crowded)
-    sample_prompts = [
+    sample_prompts : List[str] = field(default_factory = lambda: [
         "golden retriever",
         "tabby cat",
         "school bus",
@@ -99,10 +99,15 @@ class TrainConfig(ConfigClass):
         "polar bear",
         "peacock",
         "zebra"
-    ]
+    ])
     
     # Validating
     val_batch_mult = 2
+
+    # Adversarial training details
+    adv_weight : float = 0.75
+    delay_adv : int = 15000
+    adv_warmup : int = 5000
 
 @dataclass
 class LoggingConfig:
@@ -113,5 +118,5 @@ class LoggingConfig:
 @dataclass
 class SamplerConfig:
     n_steps : int = 128
-    cfg_scale : float = 3.5
+    cfg_scale : float = 1.5
     fast_steps : int = 1
