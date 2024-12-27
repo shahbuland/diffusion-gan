@@ -6,8 +6,9 @@ from tqdm import tqdm
 import joblib
 
 class FIDScorer:
-    def __init__(self, validation_loader, cache_path='./fid_cache.pkl', total_size=10000, batch_size=256, device='cuda', n_sampling_steps : int = 32):
-        self.loader = validation_loader
+    def __init__(self, cache_path='./fid_cache.pkl', total_size=10000, batch_size=256, device='cuda', n_sampling_steps : int = 32):
+        from common.data import create_loader
+        self.loader = create_loader('coco', batch_size=batch_size, image_size=512, split='validation')
         self.total_size = total_size
         self.batch_size = batch_size
         self.device = device
