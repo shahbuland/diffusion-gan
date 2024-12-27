@@ -1,3 +1,6 @@
+from torch.optim.lr_scheduler import _LRScheduler
+import math
+
 def get_scheduler_cls(scheduler_name: str):
     """
     Returns the scheduler class based on the given name.

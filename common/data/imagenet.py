@@ -16,9 +16,10 @@ def get_transform(image_size):
 
 class CustomImageNetDataset(Dataset):
     def __init__(self, image_size=256, split = 'train'):
-        self.dataset = load_dataset("ILSVRC/imagenet-1k", split=split, trust_remote_code=True, cache_dir = "../.cache/huggingface/datasets/ILSVRC___imagenet-1k")
+        self.dataset = load_dataset("benjamin-paine/imagenet-1k-256x256", split=split)
         self.transform = get_transform(image_size)
         self.label_names = self.dataset.features['label'].names
+
 
     def __len__(self):
         return len(self.dataset)
