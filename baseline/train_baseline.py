@@ -2,20 +2,20 @@ from PIL import Image
 
 import torch
 from common .data import create_loader
-from .model import RectFlowTransformer
+from .model import RFT
 from .trainer import Trainer
 from common.configs import ModelConfig, TrainConfig, LoggingConfig
 from common.utils import pretty_print_parameters
 
 if __name__ == "__main__":
     model_cfg = ModelConfig.from_yaml("configs/dit_base.yml")
-    train_cfg = TrainConfig.from_yaml("configs/delayed_staircase_muon.yml")
+    train_cfg = TrainConfig.from_yaml("configs/adamw.yml")
     log_cfg = LoggingConfig()
     
     seed = 42
     torch.manual_seed(seed)
 
-    model = RectFlowTransformer(model_cfg)
+    model = RFT(model_cfg)
     pretty_print_parameters(model)
     trainer = Trainer(train_cfg, log_cfg, model_cfg)
     

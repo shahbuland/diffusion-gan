@@ -1,8 +1,9 @@
 from common.nn.embeddings import TimestepEmbedding
-from common.nn.MLP import MLP
+from common.nn.mlp import MLP
 from common.nn.transformer import StackedDiT
 from common.nn.text_embedder import TextEmbedder
 from common.nn.vae import VAE
+from common.nn.modulation import FinalMod
 
 from common.configs import ModelConfig
 from common.utils import freeze, unfreeze
@@ -22,14 +23,15 @@ class RFTCore(nn.Module):
         self.pool_embed = MLP(config.text_d_model, dim_out = config.d_model)
         self.text_proj = nn.Linear(config.text_d_model, config.d_model, bias = False)
         self.proj_out = nn.Linear(config.d_model, config.channels, bias = False)
-
+        self.final_mod = FinalMod(config.d_model)
+        
         self.patch_proj = nn.Conv2d(
             config.channels,
             config.d_model,
             1, 1, 0, bias = False
         )
 
-        self.depatchify = eo.rearrange(
+        self.depatchify = lambda  x: eo.rearrange(
             x,
             'b (n_y n_x) c -> b c n_y n_x',
             n_y = config.sample_size
@@ -40,8 +42,8 @@ class RFTCore(nn.Module):
         y = self.text_proj(y)
         x = self.patch_proj(x).flatten(2).transpose(1,2)
 
-        cond = self.t_embed(ts) + self.pool_embed(y)
-        out = self.blocks(x, y)
+        cond = self.t_embed(ts) + self.pool_embed(y_pool)
+        x = self.blocks(x, y, cond)
 
         x = self.final_mod(x, cond)
         x = self.proj_out(x)
@@ -67,13 +69,16 @@ class RFT(nn.Module):
         elif group == 'projection':
             return [
                 *self.core.patch_proj.parameters(),
-                *self.core.proj_out.parameters(), 
-                *self.core.text_proj.parameters(),
-                *self.core.pool_embed.parameters(),
-                *self.core.t_embed.parameters()
+                *self.core.proj_out.parameters()
             ]
         elif group == 'main':
-            return self.core.blocks.parameters()
+            return [
+                *self.core.blocks.parameters(),
+                *self.core.text_proj.parameters(),
+                *self.core.pool_embed.parameters(), 
+                *self.core.t_embed.parameters(),
+                *self.core.final_mod.parameters()
+            ]
         else:
             raise ValueError(f"Unknown parameter group: {group}")
 
@@ -107,8 +112,11 @@ class RFT(nn.Module):
         extra = {}
         total_loss = 0.
 
-        pred = self.core(x, ctx, t)
-        return F.mse_loss(target, pred)
+        pred = self.core(lerpd, ctx, t)
+        diff_loss = F.mse_loss(target, pred)
+        total_loss += diff_loss
+        extra['diff_loss'] = diff_loss.item()
+        return total_loss, extra
 
     def denoise(self, *args, **kwargs):
         return self.core(*args, **kwargs)

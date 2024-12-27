@@ -1,9 +1,10 @@
 from common.configs import SamplerConfig
 from diffusers import FlowMatchEulerDiscreteScheduler
 import torch
+from tqdm import tqdm
 
 class CFGSampler:
-    def __init__(self, config : SamplerConfig):
+    def __init__(self, config : SamplerConfig = SamplerConfig()):
         self.scheduler = FlowMatchEulerDiscreteScheduler(shift=3)
         self.config = config
     

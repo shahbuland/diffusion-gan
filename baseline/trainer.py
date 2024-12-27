@@ -11,7 +11,8 @@ from common.optimizers import get_extra_optimizer
 from common.schedulers import get_scheduler_cls
 from common.utils import Stopwatch
 from .sampling import CFGSampler
-from common.validation import Validator, PickScorer, FIDScorer
+from common.wandb_utils import *
+from common.validation import FIDScorer
 
 class Trainer:
     def __init__(self, config : TrainConfig, logging_config : LoggingConfig = None, model_config : ModelConfig = None):
@@ -113,118 +114,112 @@ class Trainer:
         
         print("Checkpoint loaded successfully")
 
-def train(self, model, loader, val_loader = None):
-        # optimizer setup 
-        try:
-            opt_class = getattr(torch.optim, self.config.opt)
-        except:
-            opt_class = get_extra_optimizer(self.config.opt)
-
-        if self.config.opt == "muon":
-            opt = opt_class(
-                model.parameters('main'),
-                lr=self.config.opt_kwargs['lr'],
-                adamw_params=model.parameters('projection'),
-                adamw_lr=1.0e-4,
-                adamw_betas=self.config.opt_kwargs['betas'],
-                adamw_eps=self.config.opt_kwargs['eps'],
-                adamw_wd=self.config.opt_kwargs['weight_decay']
-            )
-        else:
-            opt = opt_class(model.parameters(), **self.config.opt_kwargs)
-
-        # scheduler setup
-        scheduler = None
-        if self.config.scheduler is not None:
+    def train(self, model, loader, val_loader = None):
+            # optimizer setup 
             try:
-                scheduler_class = getattr(torch.optim.lr_scheduler, self.config.scheduler)
+                opt_class = getattr(torch.optim, self.config.opt)
             except:
-                scheduler_class = get_scheduler_cls(self.config.scheduler)
-            scheduler = scheduler_class(opt, **self.config.scheduler_kwargs)
+                opt_class = get_extra_optimizer(self.config.opt)
 
-        # accelerator prepare
-        model.train()
-        if scheduler:
-            model, loader, opt, scheduler = self.accelerator.prepare(model, loader, opt, scheduler)
-        else:
-            model, loader, opt = self.accelerator.prepare(model, loader, opt)
+            if self.config.opt.lower() == "muon":
+                opt = opt_class(
+                    model.parameters('main'),
+                    lr=self.config.opt_kwargs['lr'],
+                    adamw_params=model.parameters('projection'),
+                    adamw_lr=self.config.opt_kwargs['adam_lr'],
+                    adamw_betas=self.config.opt_kwargs['betas'],
+                    adamw_eps=self.config.opt_kwargs['eps'],
+                    adamw_wd=self.config.opt_kwargs['weight_decay']
+                )
+            else:
+                opt = opt_class(model.parameters(), **self.config.opt_kwargs)
 
-        # ema setup
-        self.ema = EMA(
-            self.accelerator.unwrap_model(model),
-            beta = 0.9999,
-            update_after_step = 1,
-            update_every = 1,
-            ignore_names = {'vae', 'text_embedder'},
-            coerce_dtype = True
-        )
-        accel_ema = self.accelerator.prepare(self.ema)
+            # scheduler setup
+            scheduler = None
+            if self.config.scheduler is not None:
+                try:
+                    scheduler_class = getattr(torch.optim.lr_scheduler, self.config.scheduler)
+                except:
+                    scheduler_class = get_scheduler_cls(self.config.scheduler)
+                scheduler = scheduler_class(opt, **self.config.scheduler_kwargs)
 
-        # load checkpoint if we want to 
-        if self.config.resume:
-            self.accelerator.load_state(self.config.resume_path)
-            # Ensure optimizer has correct learning rate from config
-            for param_group in opt.param_groups:
-                param_group['lr'] = self.config.opt_kwargs['lr']
+            # accelerator prepare
+            model.train()
+            if scheduler:
+                model, loader, opt, scheduler = self.accelerator.prepare(model, loader, opt, scheduler)
+            else:
+                model, loader, opt = self.accelerator.prepare(model, loader, opt)
 
-        sw = Stopwatch()
-        sw.reset()
+            # ema setup
+            self.ema = EMA(
+                self.accelerator.unwrap_model(model),
+                beta = 0.9999,
+                update_after_step = 1,
+                update_every = 1,
+                ignore_names = {'vae', 'text_embedder'},
+                coerce_dtype = True
+            )
+            accel_ema = self.accelerator.prepare(self.ema)
 
-        if self.logging_config is not None:
-            wandb.watch(self.accelerator.unwrap_model(model), log = 'all')
+            # load checkpoint if we want to 
+            if self.config.resume:
+                self.accelerator.load_state(self.config.resume_path)
+                # Ensure optimizer has correct learning rate from config
+                
+            sw = Stopwatch()
+            sw.reset()
 
-        # Set up sampler with cfg
-        sampler = CFGSampler()
+            if self.logging_config is not None:
+                wandb.watch(self.accelerator.unwrap_model(model), log = 'all')
 
-        # Set up FID scorer
-        fid_scorer = FIDScorer(
-            self.accelerator.prepare(val_loader), 
-            batch_size=self.config.batch_size * self.config.val_batch_mult,
-            n_sampling_steps=32
-        )
+            # Set up sampler with cfg
+            sampler = CFGSampler()
 
-        for epoch in range(self.config.epochs):
-            for i, batch in enumerate(loader):
-                with self.accelerator.accumulate(model):
-                    loss, extra = model(batch)
-                    
-                    self.accelerator.backward(loss)
-                    
-                    opt.step()
-                    if scheduler:
-                        scheduler.step()
-                    opt.zero_grad()
+            # Set up FID scorer
+            fid_scorer = FIDScorer(
+                batch_size=self.config.batch_size * self.config.val_batch_mult
+            )
 
-                    if self.accelerator.sync_gradients:
-                        self.total_step_counter += 1
-                        self.ema.update()
-
-                    should = self.get_should()
-                    if self.logging_config is not None and should['log'] or should['sample']:
-                        wandb_dict = {
-                            "loss": extra['diff_loss'],
-                            "time_per_1k" : sw.hit(self.config.log_interval)
-                        }
-                        if 'repa_loss' in extra:
-                            wandb_dict['repa_loss'] = extra['repa_loss']
-                        if scheduler:
-                            wandb_dict["learning_rate"] = scheduler.get_last_lr()[0]
-                        if should['sample']:
-                            n_samples = self.config.n_samples
-                            images = to_wandb_batch(
-                                sampler.sample(n_samples, self.ema.ema_model, self.config.sample_prompts),
-                                self.config.sample_prompts
-                            )
-                            wandb_dict["samples"] = images
-                        wandb.log(wandb_dict)
-                        sw.reset()
-                    if should['save']:
-                        self.save(self.total_step_counter)
-                    if should['val']:
-                        self.ema.ema_model.eval()
-                        fid_score = fid_scorer(sampler, self.ema.ema_model)
-                        self.ema.ema_model.train()
+            for epoch in range(self.config.epochs):
+                for i, batch in enumerate(loader):
+                    with self.accelerator.accumulate(model):
+                        loss, extra = model(batch)
                         
-                        wandb.log({
-                            'fid': fid_score
-                        })
+                        self.accelerator.backward(loss)
+                        
+                        opt.step()
+                        if scheduler:
+                            scheduler.step()
+                        opt.zero_grad()
+
+                        if self.accelerator.sync_gradients:
+                            self.total_step_counter += 1
+                            self.ema.update()
+
+                        should = self.get_should()
+                        if self.logging_config is not None and should['log'] or should['sample']:
+                            wandb_dict = {
+                                "loss": extra['diff_loss'],
+                                "time_per_1k" : sw.hit(self.config.log_interval)
+                            }
+                            if scheduler:
+                                wandb_dict["learning_rate"] = scheduler.get_last_lr()[0]
+                            if should['sample']:
+                                n_samples = self.config.n_samples
+                                images = to_wandb_batch(
+                                    sampler.sample(n_samples, self.ema.ema_model, self.config.sample_prompts),
+                                    self.config.sample_prompts
+                                )
+                                wandb_dict["samples"] = images
+                            wandb.log(wandb_dict)
+                            sw.reset()
+                        if should['save']:
+                            self.save(self.total_step_counter)
+                        if should['val']:
+                            self.ema.ema_model.eval()
+                            fid_score = fid_scorer(sampler, self.ema.ema_model)
+                            self.ema.ema_model.train()
+                            
+                            wandb.log({
+                                'fid': fid_score
+                            })
