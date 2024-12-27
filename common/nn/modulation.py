@@ -101,8 +101,8 @@ class FinalGNMod(nn.GroupNorm):
     def forward(self, input, cond):
         cond = self.act(cond)
         scale, shift = self.fc(cond).chunk(2,dim=-1)
-        scale = expand_to_conv(scale).float()
-        shift = expand_to_conv(shift).float()
+        scale = self.expand_to_conv(scale).float()
+        shift = self.expand_to_conv(shift).float()
 
         output = F.group_norm(
             input.float(),

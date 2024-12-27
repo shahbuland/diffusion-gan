@@ -41,12 +41,12 @@ class Attn(nn.Module):
         self.split = lambda x: head_split(x, n_heads = config.n_heads)
         self.merge = lambda x: head_merge(x)
 
-        self.cross_kv = nn.Linear(dim, 2*dim, bias = False)
+        #self.cross_kv = nn.Linear(dim, 2*dim, bias = False)
 
 
         self.q_norm = RMSNorm(dim_head)
         self.k_norm = RMSNorm(dim_head)
-        self.cross_k_norm = RMSNorm(dim_head)
+        #self.cross_k_norm = RMSNorm(dim_head)
 
         #self.rope = RoPEEmbedding(dim_head)
         self.attn_func = flash_attn_func
@@ -61,12 +61,12 @@ class Attn(nn.Module):
         q = self.q_norm(q)
         k = self.k_norm(k)
 
-        cross_kv = self.cross_kv(y)
-        c_k,c_v = [self.split(x) for x in kv_chunk(cross_kv)]
-        c_k = self.cross_k_norm(c_k)
+        #cross_kv = self.cross_kv(y)
+        #c_k,c_v = [self.split(x) for x in kv_chunk(cross_kv)]
+        #c_k = self.cross_k_norm(c_k)
 
-        k = torch.cat([k, c_k], 1)
-        v = torch.cat([v, c_v], 1)
+        #k = torch.cat([k, c_k], 1)
+        #v = torch.cat([v, c_v], 1)
 
         #q, k = self.rope(q,k)
 
