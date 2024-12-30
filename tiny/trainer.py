@@ -167,7 +167,7 @@ class Trainer:
                 beta = 0.9999,
                 update_after_step = 1,
                 update_every = 1,
-                ignore_names = {'vae', 'text_embedder'},
+                ignore_names = {'vae', 'text_embedder', 'kd_loss', 'teacher'},
                 coerce_dtype = True
             )
             accel_ema = self.accelerator.prepare(self.ema)

@@ -45,6 +45,16 @@ class ModelConfig(ConfigClass):
     delay_sc : int = 0 # Delay sc to this many steps after training starts
     base_steps : int = 128
 
+    # Knowledge distillation
+    kd_weight : float = 1.0
+    kd_inds_student : List[int] = field(default_factory = lambda : [
+        2, 8, 12, 15
+    ])
+    kd_inds_teacher : List[int] = field(default_factory = lambda : [
+        4, 12, 24, 27
+    ])
+    # defaults assume 28 layer teacher, 16 layer student
+
 @dataclass
 class TrainConfig(ConfigClass):
     dataset : str = "coco"

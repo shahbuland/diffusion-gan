@@ -38,6 +38,16 @@ def wavelet_tform(x):
     x = eo.rearrange(x, '(b c) d h w -> b (c d) h w', c = 3)
 
     return x
+
+def inverse_wavelet_tform(x):
+    filters = torch.stack(get_haar_fb(x.device, x.dtype, invert = True)).unsqueeze(1)
+
+    x = F.interpolate(x, scale_factor=2,mode='bilinear')
+    x = eo.rearrange(x, 'b (c d) h w -> (b c) d h w', c = 3)
+    x = F.pad(x, (0,1,0,1), mode='constant', value=0)
+    x = F.conv2d(x, filters, stride = 2, groups = 4)
+    x = eo.reduce(x, '(b c) d h w -> b c h w', 'sum', c = 3)
+    return x
     
 def conv(fi, fo):
     return nn.Conv2d(fi, fo, 3, 1, 1)
@@ -146,7 +156,7 @@ class TinyDecoder(nn.Module):
         ])
         
         self.block_out = TinyBlock()
-        self.conv_out = proj(64, 3)
+        self.conv_out = proj(64, 3*4)
         
     def _make_layer(self, n_blocks):
         layers = []
@@ -167,6 +177,7 @@ class TinyDecoder(nn.Module):
             
         x = self.block_out(x)
         x = self.conv_out(x)
+        x = inverse_wavelet_tform(x)
         
         if output_hiddens:
             return x, h

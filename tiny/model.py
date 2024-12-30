@@ -87,8 +87,53 @@ class TinyRFTCore(nn.Module):
             return x, hidden_states
         return x
 
+class FeatureMatchingLayer(nn.Module):
+    def __init__(self, dim_student, dim_teacher):
+        super().__init__()
+
+        self.proj = (
+            MLP(dim_student, dim_out=dim_teacher) 
+            if dim_student != dim_teacher 
+            else nn.Sequential()
+        )
+    
+    def forward(self, h_student, h_teacher):
+        # both [b,n,d]
+        h_student = self.proj(h_student)
+        h_student = F.normalize(h_student, dim = -1)
+        h_teacher = F.normalize(h_teacher, dim = -1)
+        cos_sims = (h_student * h_teacher).sum(-1) # [b,n]
+        feature_loss = (-cos_sims).mean()
+        return feature_loss
+
+class KnowledgeDistillationLoss(nn.Module):
+    def __init__(self, dim_student, dim_teacher, layer_inds_student, layer_inds_teacher):
+        super().__init__()
+        
+        assert len(layer_inds_student) == len(layer_inds_teacher), \
+            "Must provide same number of student and teacher layer indices"
+            
+        self.layer_inds_student = layer_inds_student
+        self.layer_inds_teacher = layer_inds_teacher
+        self.feature_matchers = nn.ModuleList([
+            FeatureMatchingLayer(dim_student, dim_teacher)
+            for _ in range(len(layer_inds_student))
+        ])
+
+    def forward(self, h_student_list, h_teacher_list):
+        total_loss = 0.
+        for (student_idx, teacher_idx), matcher in zip(
+            zip(self.layer_inds_student, self.layer_inds_teacher), 
+            self.feature_matchers
+        ):
+            h_student = h_student_list[student_idx]
+            h_teacher = h_teacher_list[teacher_idx]
+            total_loss += matcher(h_student, h_teacher)
+        
+        return total_loss / len(self.layer_inds_student)
+
 class TinyRFT(nn.Module):
-    def __init__(self, config : ModelConfig, teacher_path : str):
+    def __init__(self, config : ModelConfig, teacher_config : ModelConfig, teacher_path : str):
         super().__init__()
 
         self.config = config
@@ -99,11 +144,18 @@ class TinyRFT(nn.Module):
         freeze(self.text_embedder)
         freeze(self.vae)
 
-        self.teacher = Teacher(teacher_path, config)
+        self.teacher = Teacher(teacher_path, teacher_config)
         freeze(self.teacher)
 
+        self.kd_loss = KnowledgeDistillationLoss(
+            config.d_model,
+            teacher_config.d_model,
+            config.kd_inds_student,
+            config.kd_inds_teacher
+        )
+
     def parameters(self):
-        return self.core.parameters()
+        return list(self.core.parameters()) + list(self.kd_loss.parameters())
 
     def denoise(self, *args, **kwargs):
         return self.core(*args, **kwargs)
@@ -127,13 +179,20 @@ class TinyRFT(nn.Module):
             # Get teacher outputs
             teacher_pred, teacher_hidden = self.teacher(x, ctx)
 
+        total_loss = 0.
+
         # Get student prediction and hidden states
         pred, student_hidden = self.core(x, ctx, output_hidden_states=True)
         
         diff_loss = F.mse_loss(target, pred)
+        kd_loss = self.kd_loss(student_hidden, teacher_hidden)
+        
+        total_loss += diff_loss
+        total_loss += kd_loss
         
         extra = {
-            'diff_loss': diff_loss.item()
+            'diff_loss': diff_loss.item(),
+            'kd_loss': kd_loss.item()
         }
         
-        return diff_loss, extra
+        return total_loss, extra

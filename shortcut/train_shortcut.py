@@ -8,7 +8,7 @@ from common.configs import ModelConfig, TrainConfig, LoggingConfig
 from common.utils import pretty_print_parameters
 
 if __name__ == "__main__":
-    model_cfg = ModelConfig.from_yaml("configs/dit_base.yml")
+    model_cfg = ModelConfig.from_yaml("configs/dit_large.yml")
     train_cfg = TrainConfig.from_yaml("configs/adamw.yml")
     log_cfg = LoggingConfig()
     

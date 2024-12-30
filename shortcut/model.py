@@ -1,4 +1,4 @@
-from common.nn.embeddings import TimestepEmbedding
+from common.nn.embeddings import TimestepEmbedding, StepEmbedding
 from common.nn.mlp import MLP
 from common.nn.transformer import StackedDiT
 from common.nn.text_embedder import TextEmbedder
@@ -125,7 +125,7 @@ class RFT(nn.Module):
             t = sample_discrete_timesteps(d_fast)
             
             def expand(u):
-                return eo.rearrange(u, 'b -> b c h w', c = c, h = h, w = w)
+                return eo.repeat(u, 'b -> b c h w', c = c, h = h, w = w)
             
             t_exp = expand(t)
             dt_exp = expand(dt_slow)
@@ -159,9 +159,16 @@ class RFT(nn.Module):
 
     def forward(self, x):
         # Split batch into regular and shortcut samples based on sc_batch_frac
-        batch_size = len(x)
+        batch_size = len(x[0])
         n_regular = int(batch_size * (1 - self.config.sc_batch_frac))
         x, sc_x = x[:n_regular], x[n_regular:]
+
+        x, ctx = x
+        x, sc_x = x[:n_regular], x[n_regular:]
+        ctx, sc_ctx = ctx[:n_regular], ctx[n_regular:]
+
+        x = (x, ctx)
+        sc_x = (sc_x, sc_ctx)
         
         if self.config.take_label:
             x, ctx = x # c is list str
