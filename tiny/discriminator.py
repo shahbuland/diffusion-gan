@@ -58,6 +58,7 @@ class VGGDiscriminator(nn.Module):
         ])
         
     def net(self, x):
+        x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
         xs = [x]
         hs = []
         for slice, head in zip(self.slices, self.heads):

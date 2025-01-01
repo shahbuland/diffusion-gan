@@ -171,7 +171,6 @@ class Trainer:
                 coerce_dtype = True
             )
             accel_ema = self.accelerator.prepare(self.ema)
-            self.accelerator.unwrap_model(model).set_ema(self.ema)
 
             # load checkpoint if we want to 
             if self.config.resume:

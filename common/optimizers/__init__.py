@@ -20,3 +20,8 @@ def get_extra_optimizer(name):
     if name.lower() == "kron":
         from .kron import Kron
         return Kron
+    if name.lower().startswith("heavyball."):
+        heavyball_name = name.lower().split("heavyball.")[1]
+        if heavyball_name == "adamw":
+            from heavyball import ForeachAdamW
+            return ForeachAdamW

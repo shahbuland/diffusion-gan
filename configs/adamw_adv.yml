@@ -31,3 +31,8 @@ sample_prompts:
   - polar bear
   - peacock
   - zebra
+
+# Adversarial training parameters
+adv_weight: 0.75
+delay_adv: 0  # Start adversarial training after this many steps
+adv_warmup: 1  # Gradually increase adversarial weight over this many steps

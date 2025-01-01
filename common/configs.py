@@ -85,8 +85,8 @@ class TrainConfig(ConfigClass):
 
     log_interval : int = 1
     sample_interval : int = 500
-    save_interval : int = 20000
-    val_interval : int = 5000
+    save_interval : int = 25000
+    val_interval : int = 50000
     resume : bool = False
     resume_path : str = "checkpoints/40k_resume"
 
@@ -121,7 +121,7 @@ class TrainConfig(ConfigClass):
 
 @dataclass
 class LoggingConfig:
-    run_name : str = "baseline dit base"
+    run_name : str = "tiny_dit"
     wandb_entity : str = "shahbuland"
     wandb_project : str = "diffusion-gan"
 

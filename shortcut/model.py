@@ -100,17 +100,10 @@ class RFT(nn.Module):
     def get_sc_loss(self, x):
         # Generate targets without grad
         with torch.no_grad():
-            if self.config.take_label:
-                x, ctx = x
-                ctx = self.text_embedder.encode_text(ctx)
-                ctx = ctx.to(x.dtype).to(x.device)
-                neg_ctx = self.empty_embed.repeat(x.shape[0],1,1).to(x.dtype).to(x.device)
-            else:
-                ctx = None
+            x, ctx = x
+            ctx = ctx.unsqueeze(1).repeat(1, 77, 1).to(x.dtype)
+            neg_ctx = self.empty_embed.repeat(x.shape[0],1,1).to(x.dtype).to(x.device)
 
-            if self.vae is not None:
-                x = self.vae.encode(x)
-            
             # Mostly the same, but we sample steps first then sample time based on those
             b,c,h,w = x.shape
             z = torch.randn_like(x)
@@ -170,20 +163,11 @@ class RFT(nn.Module):
         x = (x, ctx)
         sc_x = (sc_x, sc_ctx)
         
-        if self.config.take_label:
-            x, ctx = x # c is list str
-            if self.config.cfg_prob > 0:
-                mask = torch.rand(len(ctx)) < self.config.cfg_prob
-                ctx = [c if not m else "" for c, m in zip(ctx, mask)]
-
-            ctx = self.text_embedder.encode_text(ctx)
-            ctx = ctx.to(x.dtype).to(x.device)
-        else:
-            ctx = None
+        x, ctx = x
+        ctx = ctx.unsqueeze(1).repeat(1, 77, 1)
+        ctx = ctx.to(x.dtype)
+        neg_ctx = self.empty_embed.repeat(x.shape[0],1,1).to(x.dtype).to(x.device)
         
-        with torch.no_grad():
-            x = self.vae.encode(x)
-
         b,c,h,w = x.shape
         with torch.no_grad():
             z = torch.randn_like(x)

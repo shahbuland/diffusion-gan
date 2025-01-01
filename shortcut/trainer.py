@@ -146,9 +146,13 @@ class Trainer:
             # accelerator prepare
             model.train()
             if scheduler:
-                model, loader, opt, scheduler = self.accelerator.prepare(model, loader, opt, scheduler)
+                model, opt, scheduler = self.accelerator.prepare(model, opt, scheduler)
             else:
-                model, loader, opt = self.accelerator.prepare(model, loader, opt)
+                model, opt = self.accelerator.prepare(model, opt)
+
+            # Prepare dataloader if it's a standard DataLoader
+            if isinstance(loader, torch.utils.data.DataLoader):
+                loader = self.accelerator.prepare(loader)
 
             # ema setup
             self.ema = EMA(

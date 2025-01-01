@@ -1,4 +1,4 @@
-from shortcut.models import RFTCore as TeacherRFTCore
+from shortcut.model import RFTCore as TeacherRFTCore
 
 from common.nn.mlp import MLP
 from common.nn.transformer import StackedDiT
@@ -20,15 +20,23 @@ class Teacher(TeacherRFTCore):
         
         # Load checkpoint
         state_dict = torch.load(checkpoint_path)
-        self.load_state_dict(state_dict)
+
+        # Filter and clean state dict keys
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('ema_model.core.'):
+                new_key = key.replace('ema_model.core.', '')
+                new_state_dict[new_key] = value
+        
+        self.load_state_dict(new_state_dict)
         
         # Freeze all parameters
         for param in self.parameters():
             param.requires_grad = False
             
-    def forward(self, x, ctx):
+    def forward(self, x, y):
         # Project text embeddings
-        y_pool = ctx.clone().mean(1)
+        y_pool = y.clone().mean(1)
         y = self.text_proj(y)
         
         # Project image patches
@@ -164,25 +172,20 @@ class TinyRFT(nn.Module):
         return self.text_embedder.encode_text(*args, **kwargs)
 
     def forward(self, x):
-        if self.config.take_label:
-            x, ctx = x
-            ctx = self.text_embedder.encode_text(ctx)
-            ctx = ctx.to(x.dtype).to(x.device)
-        else:
-            ctx = None
+        x, ctx = x
+        ctx = ctx.unsqueeze(1).repeat(1, 77, 1).to(x.dtype)
         
         with torch.no_grad():
-            x = self.vae.encode(x)
             z = torch.randn_like(x)
             target = z - x
             
             # Get teacher outputs
-            teacher_pred, teacher_hidden = self.teacher(x, ctx)
+            teacher_pred, teacher_hidden = self.teacher(z, ctx)
 
         total_loss = 0.
 
         # Get student prediction and hidden states
-        pred, student_hidden = self.core(x, ctx, output_hidden_states=True)
+        pred, student_hidden = self.core(z, ctx, output_hidden_states=True)
         
         diff_loss = F.mse_loss(target, pred)
         kd_loss = self.kd_loss(student_hidden, teacher_hidden)
@@ -192,7 +195,8 @@ class TinyRFT(nn.Module):
         
         extra = {
             'diff_loss': diff_loss.item(),
-            'kd_loss': kd_loss.item()
+            'kd_loss': kd_loss.item(),
+            'samples' : (z - pred)
         }
         
         return total_loss, extra

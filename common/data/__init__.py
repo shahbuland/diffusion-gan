@@ -3,7 +3,8 @@ import torch
 from . import (
     mnist,
     imagenet,
-    coco
+    coco,
+    imagenet_latent
 )
 
 def create_loader(dataset_name, batch_size, image_size, deterministic=True, split='train'):
@@ -13,6 +14,9 @@ def create_loader(dataset_name, batch_size, image_size, deterministic=True, spli
         dataset = imagenet.CustomImageNetDataset(image_size=image_size, split = split)
     elif dataset_name.lower() == 'coco':
         dataset = coco.CustomCOCODataset(image_size=image_size, split = split)
+    elif dataset_name.lower() == 'imagenet_latent':
+        dataset = imagenet_latent.LatentImageNetDataset(split = split)
+        return imagenet_latent.LatentDataLoader(dataset, batch_size = batch_size)
     else:
         raise ValueError(f"Dataset '{dataset_name}' is not supported.")
 
