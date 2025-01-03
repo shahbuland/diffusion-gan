@@ -217,8 +217,8 @@ class VAE(nn.Module):
         self.encoder, self.decoder = load_enc_dec("vae.safetensors")
         self.encoder.cuda()
         self.decoder.cuda()
-        self.encoder.to(torch.bfloat16)
-        self.decoder.to(torch.bfloat16)
+        #self.encoder.to(torch.bfloat16)
+        #self.decoder.to(torch.bfloat16)
         
         self.force_batch_size = force_batch_size
         
@@ -227,18 +227,18 @@ class VAE(nn.Module):
         x_dtype = x.dtype
         if self.force_batch_size is not None:
             chunks = x.split(self.force_batch_size)
-            latents = [self.encoder(chunk.bfloat16()) for chunk in chunks]
+            latents = [self.encoder(chunk) for chunk in chunks]
             return torch.cat(latents, dim=0).to(x_dtype)
-        return self.encoder(x.bfloat16()).to(x_dtype)
+        return self.encoder(x).to(x_dtype)
     
     @torch.no_grad()
     def decode(self, x):
         x_dtype = x.dtype
         if self.force_batch_size is not None:
             chunks = x.split(self.force_batch_size)
-            decoded = [self.decoder(chunk.bfloat16()) for chunk in chunks]
+            decoded = [self.decoder(chunk) for chunk in chunks]
             return torch.cat(decoded, dim=0).to(x_dtype)
-        return self.decoder(x.bfloat16()).to(x_dtype)
+        return self.decoder(x).to(x_dtype)
     
     @torch.no_grad()
     def forward(self, latents):

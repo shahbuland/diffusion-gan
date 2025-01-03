@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 import einops as eo
 import math
 
@@ -93,7 +94,7 @@ class StepEmbedding(nn.Module):
             steps = steps.unsqueeze(0)
 
         # Map steps to [0, log2(max_steps)]
-        t = math.log2(self.max_steps) - torch.log2(steps.float())
+        t = (math.log2(self.max_steps) - torch.log2(steps.float())).to(steps.dtype)
         embs = self.sincos(t)
         return self.mlp(embs)
 

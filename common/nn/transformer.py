@@ -1,6 +1,7 @@
 from torchtyping import TensorType
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 try:
     from flash_attn import flash_attn_func
@@ -9,7 +10,7 @@ except:
     USE_FLASH = False
     print("Could not import flash attention. You should stick to linear attention.")
 
-from .normalization import LayerNorm, RMSNorm
+from .normalization import LayerNorm, RMSNorm, RMSNormOpt
 from .embeddings import RoPEEmbedding
 from .modulation import DoubleModBlock
 from .mlp import MixFFN
@@ -73,6 +74,46 @@ class Attn(nn.Module):
         attn_out = self.attn_func(q.to(torch.bfloat16), k.to(torch.bfloat16), v.to(torch.bfloat16)).to(q.dtype)
         attn_out = self.merge(attn_out)
 
+        return self.out(attn_out)
+
+class InferenceAttn(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        dim = config.d_model
+        dim_head = config.d_model // config.n_heads
+        self.n_heads = config.n_heads
+
+        self.qkv = nn.Linear(dim, 3 * dim, bias = False)
+        self.out = nn.Linear(dim, dim)
+
+        self.q_norm = RMSNorm(dim_head)
+        self.k_norm = RMSNorm(dim_head)
+
+    def forward(self, x, y):
+        B, N, C = x.shape
+        
+        # Get Q,K,V
+        qkv = self.qkv(x)
+        qkv = qkv.view(B, N, 3, self.n_heads, C // self.n_heads)
+        qkv = qkv.permute(2, 0, 3, 1, 4) # (3, B, H, N, C//H)
+        q, k, v = qkv[0], qkv[1], qkv[2] # Each (B, H, N, C//H)
+
+        # Apply norms
+        q = self.q_norm(q)
+        k = self.k_norm(k)
+
+        # Attention
+        attn_out = F.scaled_dot_product_attention(
+            q, 
+            k, 
+            v
+        )
+
+        # Reshape and project out
+        attn_out = attn_out.permute(0, 2, 1, 3).contiguous()
+        attn_out = attn_out.view(B, N, C)
+        
         return self.out(attn_out)
 
 class LinearAttn(nn.Module):

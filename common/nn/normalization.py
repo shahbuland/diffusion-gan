@@ -22,6 +22,19 @@ class RMSNorm(nn.Module):
 
         return x
 
+class RMSNormOpt(nn.Module):
+    def __init__(self, gain, eps = 1.0e-6):
+        super().__init__()
+
+        # Expand gain to [1,1,1,d] for broadcasting during inference
+        self.g = nn.Parameter((1 + gain)[None,None,None,:])
+        self.eps = eps
+
+    def forward(self, x):
+        # x is [b,h,n,d]
+        rms = (x.float().pow(2).mean(-1, keepdim=True) + self.eps).rsqrt() # [b,h,n,1]
+        return (x * rms.to(x.dtype)) * self.g
+
 LayerNorm = lambda dim: nn.LayerNorm(dim, elementwise_affine = False, eps = 1.0e-6)
 
 class GroupNorm(nn.GroupNorm):
