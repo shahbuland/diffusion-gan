@@ -209,6 +209,11 @@ class Trainer:
                                 "sc_loss": extra['sc_loss'],
                                 "time_per_1k" : sw.hit(self.config.log_interval)
                             }
+                            # Add any float values from extra to wandb_dict
+                            for k,v in extra.items():
+                                if isinstance(v, float) and k not in wandb_dict:
+                                    wandb_dict[k] = v
+                                    
                             if scheduler:
                                 wandb_dict["learning_rate"] = scheduler.get_last_lr()[0]
                             if should['sample']:

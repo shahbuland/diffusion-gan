@@ -34,24 +34,25 @@ class RFTCore(nn.Module):
             1, 1, 0, bias = False
         )
 
-        self.depatchify = lambda  x: eo.rearrange(
-            x,
-            'b (n_y n_x) c -> b c n_y n_x',
-            n_y = config.sample_size
-        )
+        self.depatchify = lambda x: x.transpose(-1,-2).view(x.shape[0], -1, config.sample_size, config.sample_size)
 
-    def forward(self, x, y, ts, d):
+    def forward(self, x, y, ts, d, output_hidden_states = False):
         y_pool = y.clone().mean(1)
         y = self.text_proj(y)
         x = self.patch_proj(x).flatten(2).transpose(1,2)
 
         cond = self.t_embed(ts) + self.pool_embed(y_pool) + self.d_embed(d)
-        x = self.blocks(x, y, cond)
+        if output_hidden_states:
+            x, hidden_states = self.blocks(x, y, cond, output_hidden_states=True)
+        else:
+            x = self.blocks(x, y, cond, output_hidden_states=False)
 
         x = self.final_mod(x, cond)
         x = self.proj_out(x)
         x = self.depatchify(x)
 
+        if output_hidden_states:
+            return x, hidden_states
         return x
 
 class RFT(nn.Module):
@@ -153,15 +154,16 @@ class RFT(nn.Module):
     def forward(self, x):
         # Split batch into regular and shortcut samples based on sc_batch_frac
         batch_size = len(x[0])
-        n_regular = int(batch_size * (1 - self.config.sc_batch_frac))
-        x, sc_x = x[:n_regular], x[n_regular:]
 
-        x, ctx = x
-        x, sc_x = x[:n_regular], x[n_regular:]
-        ctx, sc_ctx = ctx[:n_regular], ctx[n_regular:]
+        if self.config.sc_weight > 0:
+            n_regular = int(batch_size * (1 - self.config.sc_batch_frac))
+            x, sc_x = x[:n_regular], x[n_regular:]
+            x, ctx = x
+            x, sc_x = x[:n_regular], x[n_regular:]
+            ctx, sc_ctx = ctx[:n_regular], ctx[n_regular:]
+            sc_x = (sc_x, sc_ctx)
+            x = (x, ctx)
 
-        x = (x, ctx)
-        sc_x = (sc_x, sc_ctx)
         
         x, ctx = x
         ctx = ctx.unsqueeze(1).repeat(1, 77, 1)
@@ -189,10 +191,12 @@ class RFT(nn.Module):
         diff_loss = F.mse_loss(target, pred)
         total_loss += diff_loss
 
-        if sc_x is not None:
+        if self.config.sc_weight > 0:
             sc_loss = self.get_sc_loss(sc_x)
-            total_loss += sc_loss
-            extra['sc_loss'] = sc_loss
+            total_loss += sc_loss * self.config.sc_weight
+            extra['sc_loss'] = sc_loss.item()
+        else:
+            extra['sc_loss'] = 0.
 
         extra['diff_loss'] = diff_loss.item()
         return total_loss, extra
