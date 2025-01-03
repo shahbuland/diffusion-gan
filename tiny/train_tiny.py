@@ -9,11 +9,11 @@ from common.configs import ModelConfig, TrainConfig, LoggingConfig
 from common.utils import pretty_print_parameters
 
 if __name__ == "__main__":
-    model_cfg = ModelConfig.from_yaml("configs/dit_tiny.yml")
+    model_cfg = ModelConfig.from_yaml("configs/tiny_dit.yml")
     teacher_cfg = ModelConfig.from_yaml("configs/dit_large.yml")
     teacher_ckpt_path = "checkpoints/dit_l_best_fid/ema_model.pth"
 
-    train_cfg = TrainConfig.from_yaml("configs/adamw.yml")
+    train_cfg = TrainConfig.from_yaml("configs/adamw_adv.yml")
     log_cfg = LoggingConfig()
     
     seed = 42

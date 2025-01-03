@@ -33,7 +33,8 @@ class Teacher(TeacherRFTCore):
         # Freeze all parameters
         for param in self.parameters():
             param.requires_grad = False
-            
+
+    @torch.no_grad() 
     def forward(self, x, y):
         # Project text embeddings
         y_pool = y.clone().mean(1)
@@ -163,7 +164,8 @@ class TinyRFT(nn.Module):
         )
 
     def parameters(self):
-        return list(self.core.parameters()) + list(self.kd_loss.parameters())
+        yield from self.core.parameters()
+        yield from self.kd_loss.parameters()
 
     def denoise(self, *args, **kwargs):
         return self.core(*args, **kwargs)
@@ -192,11 +194,15 @@ class TinyRFT(nn.Module):
         
         total_loss += diff_loss
         total_loss += kd_loss
-        
+
+        with torch.no_grad():
+            orig_x = self.vae.decoder(x)
+
         extra = {
             'diff_loss': diff_loss.item(),
             'kd_loss': kd_loss.item(),
-            'samples' : (z - pred)
+            'samples' : self.vae.decoder(z - pred),
+            'original' : orig_x
         }
         
         return total_loss, extra

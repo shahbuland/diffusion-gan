@@ -4,6 +4,9 @@ from torch import nn
 import math
 from torchvision import models
 
+from common.nn.vae import VAE
+from common.utils import freeze
+
 class DeepDiscHead(nn.Module):
     def __init__(self, fi, k1, s1, k2, s2):
         super().__init__()
@@ -40,6 +43,7 @@ class VGGDiscriminator(nn.Module):
         super().__init__()
 
         self.vgg = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+
         self.inds = [3, 8, 15, 22, 29]
         # block ch are 64,128,256,512,512
         # block dim are 256,128,,64,32,16

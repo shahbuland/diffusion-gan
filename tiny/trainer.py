@@ -239,7 +239,7 @@ class Trainer:
                         total_loss, extra = model(batch)
 
                         if self.config.adv_weight > 0.0:
-                            disc_loss = discriminator(extra['samples'].detach(), batch)
+                            disc_loss = discriminator(extra['samples'].detach(), extra['original'].detach())
                             self.accelerator.backward(disc_loss)
                             d_opt.step()
                             
@@ -263,8 +263,9 @@ class Trainer:
                         if self.logging_config is not None and should['log'] or should['sample']:
                             wandb_dict = {
                                 "loss": extra['diff_loss'],
-                                "sc_loss": extra['sc_loss'],
-                                "time_per_1k" : sw.hit(self.config.log_interval)
+                                "kd_loss": extra['kd_loss'],
+                                "time_per_1k" : sw.hit(self.config.log_interval),
+                                'disc_loss' : disc_loss.item()
                             }
                             if 'adv_loss' in extra:
                                 wandb_dict['adv_loss'] = extra['adv_loss']
