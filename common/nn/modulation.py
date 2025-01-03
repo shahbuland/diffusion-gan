@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torchtyping import TensorType
 import einops as eo
 
 from .normalization import LayerNorm
