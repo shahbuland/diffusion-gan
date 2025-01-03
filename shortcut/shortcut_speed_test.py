@@ -11,11 +11,14 @@ from common.nn.mlp import MixFFNOpt
 from common.nn.transformer import InferenceAttn
 from common.nn.normalization import RMSNormOpt
 import torch.nn.functional as F
+import os
 
 torch.backends.cuda.enable_flash_sdp(True)
 
 class ShortcutSampler:
     def __init__(self):
+        print("Compiling modules...")
+
         # Load VAE and text encoder
         self.vae = VAE()
         self.vae.cuda()
@@ -32,7 +35,7 @@ class ShortcutSampler:
         self.model = RFTCore(model_cfg)
 
         # Load checkpoint (filtering for core params only)
-        state_dict = torch.load("checkpoints/dit_l_275k/ema_model.pth")
+        state_dict = torch.load("ema_model.pth")
         new_state_dict = {}
         for key, value in state_dict.items():
             if key.startswith('ema_model.core.'):
@@ -91,50 +94,33 @@ class ShortcutSampler:
             # Replace the attention module
             self.model.blocks.blocks[i].attn = new_attn
     
-        self.text_embedder.encode_text = torch.compile(self.text_embedder.encode_text)
-        self.vae.decode = torch.compile(self.vae.decode)
-        self.model = torch.compile(self.model)
-    
+        # Compile modules
+        #self.text_embedder.encode_text = torch.compile(self.text_embedder.encode_text)
+        #self.vae.decode = torch.compile(self.vae.decode)
+        #self.model = torch.compile(self.model)
+
+        self.n_steps = 4
+        self.timesteps = torch.linspace(1, 0, self.n_steps+1)[:-1].cuda().half()  # 4 steps, excluding 0
+        self.dt = -1/self.n_steps
+        self.d = torch.full((self.n_samples,), self.n_steps, device='cuda', dtype=torch.float16)
         self.cached_prompt = None
 
     def set_prompt(self, prompt):
-        self.cached_prompt = self.text_embedder.encode_text([prompt]).half()
+        self.c = self.text_embedder.encode_text([prompt]).half()
 
     @torch.no_grad()
-    def sample(self, prompt = None):
-        n_samples = 1
+    @torch.compile()
+    def sample(self):
+        # Make noise directly on GPU
+        noisy = torch.randn(1, 64, 8, 8, device='cuda', dtype=torch.float16)
 
-        # Get text embeddings
-        if prompt is None:
-            c = self.cached_prompt
-        else:
-            c = self.text_embedder.encode_text([prompt]).half()
-        
-        # Make the noise 
-        sample_shape = (64, 8, 8)
-        sample_shape = (n_samples,) + sample_shape
-        noisy = torch.randn(*sample_shape)
-
-        # Move everything to GPU and convert to fp16
-        device = 'cuda'
-        noisy = noisy.to(device=device, dtype=torch.float16)
-        c = c.to(device=device)
-
-        # Generate 4 evenly spaced timesteps from 1 to 0
-        n_steps = 4
-        timesteps = torch.linspace(1, 0, n_steps+1)[:-1]  # 4 steps, excluding 0
-        dt = -1/n_steps
-
-        d = torch.full((n_samples,), n_steps, device=device, dtype=torch.float16)
-
-        for t in timesteps:
-            t = t.to(device=device, dtype=torch.float16)
-            pred = self.model(noisy, c, t, d)
-            noisy += pred * dt
+        # Sample loop using pre-computed values
+        for t in self.timesteps:
+            pred = self.model(noisy, self.c, t, self.d)
+            noisy += pred * self.dt
 
         # Decode with VAE
         return self.vae.decode(noisy)
-
 
 if __name__ == "__main__":
     sampler = ShortcutSampler()
