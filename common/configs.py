@@ -59,10 +59,10 @@ class ModelConfig(ConfigClass):
 class TrainConfig(ConfigClass):
     dataset : str = "coco"
     target_batch_size : int = 256
-    batch_size : int = 256
+    batch_size : int = 128
     epochs : int = 100
     # optimizer
-    opt : str = "Muon"
+    opt : str = "AdamW"
     opt_kwargs : Dict = field(default_factory = lambda : {
         "lr": 1.0e-4,
         "eps": 1.0e-15,
@@ -121,7 +121,7 @@ class TrainConfig(ConfigClass):
 
 @dataclass
 class LoggingConfig:
-    run_name : str = "tiny_dit"
+    run_name : str = "dit_tiny_baseline"
     wandb_entity : str = "shahbuland"
     wandb_project : str = "diffusion-gan"
 
