@@ -193,8 +193,8 @@ class DiTBlock(nn.Module):
 
         x = self.norm_1(x)
         x = mod1.first_step(x)
-        attn_out = self.attn(x,y)
-        attn_out = mod1.second_step(attn_out)
+        x = self.attn(x,y)
+        x = mod1.second_step(x)
 
         x = self.norm_2(x + resid_1)
         resid_2 = x.clone()
